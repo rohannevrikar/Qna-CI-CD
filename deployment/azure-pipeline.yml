@@ -1,0 +1,95 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- dev
+- staging
+- master
+variables:
+    - ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
+      - group: dev
+      - name: environment
+        value: Development
+
+    - ${{ if eq(variables['Build.SourceBranchName'], 'staging') }}:
+      - group: staging
+      - name: environment
+        value: Staging
+
+    - ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+      - group: production
+      - name: environment
+        value: Production
+
+stages:
+- stage: Release 
+  displayName: Release  
+      
+  jobs:
+  - deployment: Release
+    displayName: Release
+    pool:
+      vmImage: windows-2019
+   
+    environment: $(environment)
+
+    strategy:
+      runOnce:    
+        deploy:
+          steps:
+          - checkout: self        
+          
+          - task: replacetokens@3
+            displayName: 'Replace template parameter values with pipeline variables'
+            inputs:
+              rootDirectory: 'Installation'
+              targetFiles: '$(templateParameterFile)'
+              encoding: 'auto'
+              writeBOM: true
+              actionOnMissing: 'warn'
+              keepToken: false
+              tokenPrefix: '#'
+              tokenSuffix: '#'
+              useLegacyPattern: false
+              enableTransforms: false
+              enableTelemetry: false
+         
+      
+          - task: AzurePowerShell@5
+            displayName: 'Powershell script to deploy template'
+            inputs:
+              azureSubscription: "$(subscription)"
+              ScriptType: 'FilePath'
+              ScriptPath: 'Installation/install.ps1'
+              ScriptArguments: '-ResourceGroupName $(rg-name) -TemplateFile Installation/$(templateFile) -TemplateParameterFile Installation/$(templateParameterFile)'
+              azurePowerShellVersion: 'LatestVersion'  
+
+          - task: AzureKeyVault@1
+            inputs:
+              azureSubscription: "$(subscription)"
+              KeyVaultName: $(keyvault-name) 
+              SecretsFilter: '*'
+              RunAsPreJob: false
+              
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.x'
+              addToPath: true
+              architecture: 'x64'
+              
+          - script: python -m pip install requests
+            displayName: 'Install requests lib'
+
+          - script: python -m pip install openpyxl
+            displayName: 'Install openpyxl lib'
+
+          
+              
+          - task: PythonScript@0
+            inputs:
+              scriptSource: 'filePath'
+              scriptPath: 'Utils/qnaKB-seed.py'
+              arguments: '$(qnaHostEndpoint) $(qna-accountKey) $(qnaKbName)'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/Utils'
