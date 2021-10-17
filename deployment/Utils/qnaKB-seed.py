@@ -11,8 +11,6 @@ host = host + "qnamaker/v4.0/"
 def monitorOperation(host, operationId):
     state = ""
     count = 0
-    print(subscriptionKey)
-    print(operationId)
     while(state != "Succeeded" and count < 10):
         response = requests.get(host + "operations/" + operationId, headers={'Ocp-Apim-Subscription-Key': subscriptionKey, 'Content-Type': 'application/json'})
         state = response.json()['operationState']
